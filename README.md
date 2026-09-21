@@ -8,3 +8,4 @@
 ```bash
 dotnet build
 dotnet run --project src/Cli
+NET SDK 10.0, Windows 11 x6
