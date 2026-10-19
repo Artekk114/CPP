@@ -1,43 +1,35 @@
-﻿using Core.Dto;
-using Core.Import;
+﻿using System;
+using Core.Domain;
 
-string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
+Console.WriteLine("Все успішно");
+Order order = Order.Create("ORD-001");
+order.AddLine("P-101", "Ноутбук", 25000m, 1);
+order.AddLine("P-102", "Мишка", 800m, 2);
+Console.WriteLine($"Замовлення {order.Id} створено. Рядків: {order.Lines.Count}. Сума: {order.Total}");
 
-if (!File.Exists(path))
+order.Confirm();
+Console.WriteLine($"Замовлення {order.Id} підтверджено: {order.IsConfirmed}\n");
+
+
+Console.WriteLine("Порушення інваріантів");
+TryDo("Порожній ID замовлення", () => Order.Create("   "));
+
+TryDo("Додавання рядка до підтвердженого замовлення", () => order.AddLine("P-103", "Килимок", 300m, 1));
+
+Order emptyOrder = Order.Create("ORD-002");
+TryDo("Від'ємна ціна товару", () => emptyOrder.AddLine("P-201", "Брак", -100m, 1));
+TryDo("Нульова кількість товару", () => emptyOrder.AddLine("P-202", "Тест", 50m, 0));
+TryDo("Підтвердження порожнього замовлення", () => emptyOrder.Confirm());
+
+static void TryDo(string title, Action action)
 {
-    Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
-    return 1;
+    try
+    {
+        action();
+        Console.WriteLine($" {title}: виняток НЕ спрацював, інваріант відсутній");
+    }
+    catch (Exception ex) { 
+    
+        Console.WriteLine($" {title}: {ex.GetType().Name} - {ex.Message}");
+    }
 }
-
-
-MixedImportResult result = Path.GetExtension(path).ToLowerInvariant() switch
-{
-    ".csv" => MixedCsvImporter.Load(path),
-    ".json" => ProductJsonImporter.Load(path),
-    _ => throw new NotSupportedException($"Формат файлу {Path.GetExtension(path)} не підтримується")
-};
-
-Console.WriteLine($"Завантажено товарів: {result.Products.Count}, складів: {result.Warehouses.Count}");
-
-foreach (var p in result.Products.Take(5))
-    Console.WriteLine($" Товар: {p.Id,-6} {p.Name,-20} {p.Price,8:F2}");
-
-foreach (var w in result.Warehouses.Take(5))
-    Console.WriteLine($" Склад: {w.Id,-6} {w.Name}");
-
-if (result.Errors.Count > 0)
-{
-    Console.WriteLine($"\nПропущено рядків: {result.Errors.Count}");
-    foreach (string e in result.Errors)
-        Console.WriteLine($" ! {e}");
-}
-
-int accepted = result.Products.Count + result.Warehouses.Count;
-int errors = result.Errors.Count;
-int total = accepted + errors;
-double errorRate = total == 0 ? 0 : (double)errors / total * 100;
-
-Console.WriteLine(new string('-', 50));
-Console.WriteLine($"Статистика: Усього: {total} | Прийнято: {accepted} | Пропущено: {errors} | Помилок: {errorRate:F1}%");
-
-return 0;
