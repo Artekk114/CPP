@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Core.Dto;
 
@@ -10,13 +11,15 @@ public sealed class Order
 
     public string Id { get; }
     public IReadOnlyList<OrderLine> Lines => _lines.AsReadOnly();
-    public bool IsConfirmed { get; private set; }
+
+    public OrderStatus Status { get; private set; }
+
     public decimal Total => _lines.Sum(l => l.Price * l.Quantity);
 
-    private Order(string id, bool isConfirmed)
+    private Order(string id, OrderStatus status)
     {
         Id = id;
-        IsConfirmed = isConfirmed;
+        Status = status;
     }
 
     public static Order Create(string id)
@@ -24,13 +27,14 @@ public sealed class Order
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Ідентифікатор замовлення обов'язковий", nameof(id));
 
-        return new Order(id.Trim(), false);
+        return new Order(id.Trim(), OrderStatus.Draft);
     }
 
     public void AddLine(string productId, string name, decimal price, int quantity)
     {
-        if (IsConfirmed)
-            throw new InvalidOperationException($"Замовлення {Id} вже підтверджене, рядки додавати не можна");
+
+        if (Status != OrderStatus.Draft)
+            throw new InvalidOperationException($"Замовлення {Id} має статус {Status}, рядки додавати не можна");
 
         if (string.IsNullOrWhiteSpace(productId))
             throw new ArgumentException("Ідентифікатор товару не може бути порожнім", nameof(productId));
@@ -49,30 +53,32 @@ public sealed class Order
         if (_lines.Count == 0)
             throw new InvalidOperationException($"Замовлення {Id} порожнє, підтвердження неможливе");
 
-        if (IsConfirmed)
-            throw new InvalidOperationException($"Замовлення {Id} вже підтверджене");
-
-        IsConfirmed = true;
+        Status = Status switch
+        {
+            OrderStatus.Draft => OrderStatus.Confirmed,
+            OrderStatus.Confirmed => throw new InvalidOperationException($"Замовлення {Id} вже підтверджене"),
+            OrderStatus.Cancelled => throw new InvalidOperationException($"Скасоване замовлення {Id} не можна підтвердити"),
+            _ => throw new NotImplementedException("Невідомий статус")
+        };
     }
+
+    public void Cancel()
+    {
+        Status = Status switch
+        {
+            OrderStatus.Draft => OrderStatus.Cancelled,
+            OrderStatus.Confirmed => throw new InvalidOperationException($"Підтверджене замовлення {Id} не можна скасувати"),
+            OrderStatus.Cancelled => throw new InvalidOperationException($"Замовлення {Id} вже скасоване"),
+            _ => throw new NotImplementedException("Невідомий статус")
+        };
+    }
+
+    // Оновлені методи DTO (припускаємо, що в OrderDto замість bool IsConfirmed тепер string Status або OrderStatus)
+    /*
     public OrderDto ToDto()
     {
         var lineDtos = _lines.Select(l => new OrderLineDto(l.ProductId, l.Name, l.Price, l.Quantity)).ToList();
-        return new OrderDto(Id, IsConfirmed, lineDtos);
+        return new OrderDto(Id, Status.ToString(), lineDtos); 
     }
-    public static Order FromDto(OrderDto dto)
-    {
-        Order order = Create(dto.Id);
-
-        foreach (var line in dto.Lines)
-        {
-            order.AddLine(line.ProductId, line.Name, line.Price, line.Quantity);
-        }
-
-        if (dto.IsConfirmed)
-        {
-            order.Confirm();
-        }
-
-        return order;
-    }
+    */
 }
