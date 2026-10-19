@@ -57,12 +57,14 @@ public static class MixedCsvImporter
 
 
             ["P", var id, var name, var price] when decimal.TryParse(price, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal p) && p >= 0
-                => new ParseProductOk(new ProductDto(id, name, p)),
+
+                 => new ParseProductOk(new ProductDto(id, "DEFAULT-SKU", name, "шт", p, 0)),
 
             ["P", var id, var name, var price, var note] when decimal.TryParse(price, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal p) && p >= 0
-                => new ParseProductOk(new ProductDto(id, name, p, string.IsNullOrWhiteSpace(note) ? null : note)),
 
-            
+                => new ParseProductOk(new ProductDto(id, "DEFAULT-SKU", name, "шт", p, 0, string.IsNullOrWhiteSpace(note) ? null : note)),
+
+
             ["P", _, _, var badPrice, ..]
                 => new ParseFailed($"ціна '{badPrice}' не є коректним додатним числом"),
 

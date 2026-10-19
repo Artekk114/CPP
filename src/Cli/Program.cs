@@ -1,44 +1,64 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
 using Core.Domain;
+using Core.Dto;
+using Core.Import;
 
-Console.WriteLine("Все успішно");
-Order order = Order.Create("ORD-001");
-order.AddLine("P-101", "Ноутбук", 25000m, 1);
-order.AddLine("P-102", "Мишка", 800m, 2);
-Console.WriteLine($"Замовлення {order.Id} створено. Рядків: {order.Lines.Count}. Сума: {order.Total}");
-Console.WriteLine($"Поточний статус: {order.Status}");
+Console.WriteLine("--- Сценарій 1: Успіх (Доменна модель) ---");
+Product product = Product.Create("P-001", "sku-001", "Цемент М400", "шт", 150.50m, 100);
+Console.WriteLine($"Створено: {product.Name}, Залишок: {product.Quantity}");
+product.RegisterArrival(50);
+product.Issue(30);
+Console.WriteLine($"Після операцій: Залишок = {product.Quantity}, Статус = {product.Status}\n");
 
-order.Confirm();
-Console.WriteLine($"Замовлення {order.Id} підтверджено. Новий статус: {order.Status}\n");
+Console.WriteLine("--- Сценарій 2: Порушення інваріантів ---");
+TryDo("Видача більша за залишок", () => product.Issue(1000));
+TryDo("Порожній SKU при створенні", () => Product.Create("P-002", "   ", "Пісок", "т", 100m, 10));
+TryDo("Від'ємна ціна", () => Product.Create("P-003", "SKU-003", "Цегла", "шт", -5m, 100));
 
+product.Discontinue();
+TryDo("Видача товару, знятого з виробництва", () => product.Issue(10));
 
-Console.WriteLine("Порушення інваріантів");
-TryDo("Порожній ID замовлення", () => Order.Create("   "));
-
-TryDo("Додавання рядка до підтвердженого замовлення", () => order.AddLine("P-103", "Килимок", 300m, 1));
-
-Order emptyOrder = Order.Create("ORD-002");
-TryDo("Від'ємна ціна товару", () => emptyOrder.AddLine("P-201", "Брак", -100m, 1));
-TryDo("Нульова кількість товару", () => emptyOrder.AddLine("P-202", "Тест", 50m, 0));
-TryDo("Підтвердження порожнього замовлення", () => emptyOrder.Confirm());
-Console.WriteLine("\n--- Тестування статусів (Додаткове завдання) ---");
-
-Order orderToCancel = Order.Create("ORD-003");
-orderToCancel.Cancel();
-Console.WriteLine($"Замовлення {orderToCancel.Id} переведено в статус: {orderToCancel.Status}");
-
-TryDo("Додавання товару до скасованого замовлення", () => orderToCancel.AddLine("P-301", "Кабель", 100m, 1));
-TryDo("Підтвердження скасованого замовлення", () => orderToCancel.Confirm());
-TryDo("Скасування підтвердженого замовлення", () => order.Cancel()); 
 static void TryDo(string title, Action action)
 {
     try
     {
         action();
-        Console.WriteLine($" {title}: виняток НЕ спрацював, інваріант відсутній");
+        Console.WriteLine($" {title}: виняток НЕ спрацював - інваріант відсутній!");
     }
-    catch (Exception ex) { 
-    
+    catch (Exception ex)
+    {
         Console.WriteLine($" {title}: {ex.GetType().Name} - {ex.Message}");
     }
+}
+
+Console.WriteLine("\n--- Додаткове завдання 1: Мапінг результатів 3-ї лаби ---");
+string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
+
+if (!File.Exists(path))
+{
+    Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
+    return;
+}
+
+
+MixedImportResult result = Path.GetExtension(path).ToLowerInvariant() switch
+{
+    ".csv" => MixedCsvImporter.Load(path),
+    ".json" => ProductJsonImporter.Load(path),
+    _ => throw new NotSupportedException($"Формат файлу {Path.GetExtension(path)} не підтримується")
+};
+
+var (validProducts, domainErrors) = ProductMapper.MapProducts(result.Products);
+
+Console.WriteLine($"Успішно імпортовано та пройшли бізнес-правила: {validProducts.Count} товарів");
+foreach (var p in validProducts.Take(5))
+    Console.WriteLine($"  [+] {p.Id,-6} {p.Name,-20} Залишок: {p.Quantity}");
+
+if (domainErrors.Count > 0)
+{
+    Console.WriteLine($"\nВідхилено доменною моделлю (інваріанти): {domainErrors.Count}");
+    foreach (string e in domainErrors.Take(10))
+        Console.WriteLine($"  [-] {e}");
 }

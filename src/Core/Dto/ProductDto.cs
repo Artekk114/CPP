@@ -1,3 +1,11 @@
 ﻿namespace Core.Dto;
 
-public record ProductDto(string Id, string Name, decimal Price ,string? Note = null);
+public record ProductDto(
+    string Id,
+    string Sku,
+    string Name,
+    string Unit,
+    decimal Price,
+    int Quantity,
+    string? Note = null
+);
