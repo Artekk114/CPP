@@ -1,64 +1,46 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
-using Core.Domain;
-using Core.Dto;
-using Core.Import;
+using Core.Storage;
+using Core.Services;
+using Core.Abstractions;
 
-Console.WriteLine("--- Сценарій 1: Успіх (Доменна модель) ---");
-Product product = Product.Create("P-001", "sku-001", "Цемент М400", "шт", 150.50m, 100);
-Console.WriteLine($"Створено: {product.Name}, Залишок: {product.Quantity}");
-product.RegisterArrival(50);
-product.Issue(30);
-Console.WriteLine($"Після операцій: Залишок = {product.Quantity}, Статус = {product.Status}\n");
+bool useFile = args.Contains("--file");
+string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
 
-Console.WriteLine("--- Сценарій 2: Порушення інваріантів ---");
-TryDo("Видача більша за залишок", () => product.Issue(1000));
-TryDo("Порожній SKU при створенні", () => Product.Create("P-002", "   ", "Пісок", "т", 100m, 10));
-TryDo("Від'ємна ціна", () => Product.Create("P-003", "SKU-003", "Цегла", "шт", -5m, 100));
+ICatalogStore store = useFile
+    ? new FileCatalogStore(dataPath)
+    : new InMemoryCatalogStore();
 
-product.Discontinue();
-TryDo("Видача товару, знятого з виробництва", () => product.Issue(10));
+var service = new CatalogService(store);
+
+Console.WriteLine($"Сховище: {store.GetType().Name}\n");
+
+Console.WriteLine("--- Сценарій 1: Успіх ---");
+var created = service.Add("SKU-101", "Кабель UTP cat6", "м", 150.50m, 50);
+Console.WriteLine($"Додано товар: {created.Name}, Залишок: {created.Quantity}");
+
+service.Receive(created.Id, 25);
+Console.WriteLine("Після приходу:");
+
+foreach (var p in service.All())
+{
+    Console.WriteLine($" {p.Id} | {p.Sku,-10} | {p.Name,-20} | Залишок: {p.Quantity,5} | Ціна: {p.Price}");
+}
+
+Console.WriteLine("\n--- Сценарій 2: Помилки (Відмови) ---");
+
+TryDo("Спроба отримати неіснуючий товар", () => service.Receive("FAKE-ID", 10));
 
 static void TryDo(string title, Action action)
 {
     try
     {
         action();
-        Console.WriteLine($" {title}: виняток НЕ спрацював - інваріант відсутній!");
+        Console.WriteLine($" [ ] {title}: виняток НЕ спрацював!");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($" {title}: {ex.GetType().Name} - {ex.Message}");
+        Console.WriteLine($" [X] {title}: {ex.GetType().Name} - {ex.Message}");
     }
-}
-
-Console.WriteLine("\n--- Додаткове завдання 1: Мапінг результатів 3-ї лаби ---");
-string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
-
-if (!File.Exists(path))
-{
-    Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
-    return;
-}
-
-
-MixedImportResult result = Path.GetExtension(path).ToLowerInvariant() switch
-{
-    ".csv" => MixedCsvImporter.Load(path),
-    ".json" => ProductJsonImporter.Load(path),
-    _ => throw new NotSupportedException($"Формат файлу {Path.GetExtension(path)} не підтримується")
-};
-
-var (validProducts, domainErrors) = ProductMapper.MapProducts(result.Products);
-
-Console.WriteLine($"Успішно імпортовано та пройшли бізнес-правила: {validProducts.Count} товарів");
-foreach (var p in validProducts.Take(5))
-    Console.WriteLine($"  [+] {p.Id,-6} {p.Name,-20} Залишок: {p.Quantity}");
-
-if (domainErrors.Count > 0)
-{
-    Console.WriteLine($"\nВідхилено доменною моделлю (інваріанти): {domainErrors.Count}");
-    foreach (string e in domainErrors.Take(10))
-        Console.WriteLine($"  [-] {e}");
 }
