@@ -85,3 +85,15 @@ static void Print(IReadOnlyList<StockLine> lines)
     foreach (var l in lines)
         Console.WriteLine($"  {l.Sku,-10} {l.Name,-24} {l.Quantity,6} {l.Unit}");
 }
+var sampleMovements = new[]
+{
+    new StockMovement("p001", +50, "Received"),
+    new StockMovement("p001", -10, "Issued"),
+    new StockMovement("p005", +12, "Received")
+};
+
+Console.WriteLine("\n--- Зведений звіт рухів (GroupJoin) ---");
+foreach (var row in ReportService.MovementSummary(items, sampleMovements))
+{
+    Console.WriteLine($"  {row.Sku,-10} {row.Name,-24} операцій: {row.MovementsCount,2}  сума змін: {row.NetDelta,4:+0;-0}");
+}
