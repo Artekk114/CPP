@@ -14,7 +14,7 @@ public static class MixedCsvImporter
 {
     private const char Separator = ';';
 
-    public static MixedImportResult Load(string path)
+    public static MixedImportResult Load(string path, Action<string>? onWarning = null)
     {
         var products = new List<ProductDto>();
         var warehouses = new List<WarehouseDto>();
@@ -40,10 +40,13 @@ public static class MixedCsvImporter
                     warehouses.Add(w.Value);
                     break;
                 case ParseFailed failed:
-                    errors.Add($"рядок {number}: {failed.Reason}");
+                    var msg = $"рядок {number}: {failed.Reason}";
+                    errors.Add(msg);
+                    onWarning?.Invoke(msg);
                     break;
             }
         }
+
         return new MixedImportResult(products, warehouses, errors);
     }
 
