@@ -51,7 +51,7 @@ public sealed class FileCatalogStore(string path) : ICatalogStore
     public Product? GetById(string id)
     {
         EnsureLoaded();
-        return _cache.GetValueOrDefault(id); 
+        return _cache.GetValueOrDefault(id);
     }
 
     public void Add(Product item)
